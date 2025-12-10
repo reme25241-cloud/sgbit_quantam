@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Security Charts{% endblock %}
+
+{% block content %}
+<link href="{% static 'assets/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+
+<style>
+  :root{
+    --ai-surface:#ffffff;
+    --ai-border:#e5e7eb;
+    --ai-muted:#6b7280;
+  }
+
+  /* ===== Layout: make main area shrink/expand beside a fixed sidebar ===== */
+  .ai-main {
+    min-width: 0;               /* critical to prevent overflow when inside flex with sidebar */
+  }
+
+  /* ===== Cards & headers ===== */
+  .ai-card{
+    background:var(--ai-surface);
+    border:1px solid var(--ai-border);
+    border-radius:14px;
+    box-shadow:0 10px 30px rgba(2,6,23,.08);
+  }
+  .ai-card .card-header{
+    border-bottom:1px solid rgba(0,0,0,.06);
+    background:linear-gradient(180deg,#fafafa,#fff);
+    font-weight:600;
+  }
+  .muted{ color:var(--ai-muted); }
+
+  /* ===== KPI tiles ===== */
+  .ai-kpi .display-6{ line-height:1; }
+
+  /* ===== Charts: responsive containers, no fixed canvas height ===== */
+  .chart-wrap{
+    position:relative;
+    width:100%;
+    height:auto;       /* let aspect-ratio control height */
+    aspect-ratio:16/9; /* widescreen default */
+    min-height:240px;  /* sensible floor so tooltips/legend don’t clip */
+  }
+  @media (max-width: 992px){ .chart-wrap{ aspect-ratio:4/3; min-height:220px; } }
+  @media (max-width: 768px){ .chart-wrap{ aspect-ratio:1/1; min-height:200px; } }
+  canvas{ width:100% !important; height:100% !important; display:block; }
+
+  /* ===== Tables: prevent layout break on long hex/keys ===== */
+  .table-nowrap th, .table-nowrap td{ white-space:nowrap; }
+  .code-clip{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    max-width: 18ch;
+    display:inline-block;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    vertical-align:bottom;
+  }
+  .badge-soft{
+    background:#eef2ff;
+    color:#3730a3;
+    border:1px solid #e0e7ff;
+  }
+
+  /* ===== Grid gutters & container: remove hard edges that can cause overflow ===== */
+  .container-fluid.ai-container{ padding-left: 1rem; padding-right: 1rem; }
+  .row.g-3 > [class*="col-"]{ padding-left:.5rem; padding-right:.5rem; }
+
+  /* ===== Safety net: allow horizontal scroll INSIDE tables, not the page ===== */
+  .table-responsive{ overflow-x:auto; }
+</style>
+
+<div class="container-fluid ai-container py-3 ai-main">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <h2 class="mb-0 d-flex align-items-center gap-2">
+      <i class="bi bi-shield-lock"></i> Security Charts
+    </h2>
+    <!-- <a href="{% url 'dashboard' %}" class="btn btn-outline-primary btn-sm">← Back</a> -->
+  </div>
+  <p class="muted mb-4">Visual comparison of algorithms used in your messages, with quick explanations and a metadata inspector.</p>
+
+  <!-- KPIs -->
+  <div class="row g-3 ai-kpi mb-2">
+    <div class="col-6 col-md-3">
+      <div class="ai-card card h-100">
+        <div class="card-body">
+          <div class="fw-semibold text-muted">Total Messages</div>
+          <div class="display-6">{{ total_msgs|default:0 }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ai-card card h-100">
+        <div class="card-body">
+          <div class="fw-semibold text-muted">Classical Key Encapsulation Mechanisms (KEMs)  used</div>
+          <div class="display-6">{{ classical_kem_count|default:0 }}</div>
+          <div class="small text-muted">PQ-KEM: {{ pq_kem_count|default:0 }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ai-card card h-100">
+        <div class="card-body">
+          <div class="fw-semibold text-muted">PQ-Sign used</div>
+          <div class="display-6">{{ pq_sign_count|default:0 }}</div>
+          <div class="small text-muted">Classical: {{ classical_sign_count|default:0 }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ai-card card h-100">
+        <div class="card-body">
+          <div class="fw-semibold text-muted">Sym Algos Tracked</div>
+          <div class="display-6">{{ sym_labels|length|default_if_none:0 }}</div>
+          <div class="small text-muted">Distinct ciphers</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="ai-card card h-100">
+        <div class="card-header">KEM Usage</div>
+        <div class="card-body">
+          <div class="chart-wrap">
+            <canvas id="kemChart" aria-label="KEM usage chart" role="img"></canvas>
+          </div>
+          <div class="small text-muted mt-2">
+            Shows how often Post-Quantum <strong>Kyber</strong> (PQ-KEM) vs classical KEM is used.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="ai-card card h-100">
+        <div class="card-header">Signature Usage</div>
+        <div class="card-body">
+          <div class="chart-wrap">
+            <canvas id="signChart" aria-label="Signature usage chart" role="img"></canvas>
+          </div>
+          <div class="small text-muted mt-2">
+            Compares <strong>Dilithium</strong> (PQ-sign) vs classical signatures (e.g., Ed25519/RSA).
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="ai-card card h-100">
+        <div class="card-header">Symmetric Algorithm Usage</div>
+        <div class="card-body">
+          <div class="chart-wrap">
+            <canvas id="symChart" aria-label="Symmetric algorithm usage chart" role="img"></canvas>
+          </div>
+          <div class="small text-muted mt-2">
+            Breakdown of <strong>AES-GCM</strong> vs <strong>ChaCha20-Poly1305</strong>.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Algorithm Roles -->
+  <div class="ai-card card mt-4">
+    <div class="card-header">Algorithms — Role, Importance & Hacker Challenges</div>
+    <div class="card-body">
+      <div class="row g-3">
+        {% for a in algo_roles %}
+        <div class="col-md-6 col-xl-4">
+          <div class="border rounded p-3 h-100">
+            <div class="fw-bold mb-1 d-flex align-items-center gap-2">
+              <i class="bi bi-cpu"></i> {{ a.name }}
+            </div>
+            <div class="mb-1"><span class="muted">Role:</span> {{ a.role }}</div>
+            <div class="mb-1"><span class="muted">Importance:</span> {{ a.importance }}</div>
+            <div class="mb-0"><span class="muted">Hacker faces:</span> {{ a.hacker }}</div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+          <div class="alert alert-info mb-0"><i class="bi bi-info-circle"></i> No algorithm info configured.</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Metadata Meaning -->
+  <div class="ai-card card mt-4">
+    <div class="card-header">Encryption Metadata — Field meanings</div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr><th>Field</th><th>Meaning</th></tr>
+          </thead>
+          <tbody>
+            {% for m in meta_explain %}
+            <tr>
+              <td><code>{{ m.key }}</code></td>
+              <td>{{ m.meaning }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="2" class="muted">No metadata descriptions.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="small text-danger mb-0">
+        <strong>Note:</strong> <code>ss</code> is stored for DEMO ONLY — do not store shared secrets in production.
+      </p>
+    </div>
+  </div>
+
+  <!-- Recent Messages Inspector -->
+  <div class="ai-card card mt-4 mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Recent Messages — Metadata Inspector (latest 10)</span>
+      <span class="small muted">Values truncated for readability</span>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle table-nowrap">
+          <thead class="table-light">
+            <tr>
+              <th>ID</th>
+              <th>When</th>
+              <th>From</th>
+              <th>To</th>
+              <th>PQ-KEM</th>
+              <th>PQ-Sign</th>
+              <th>Sym</th>
+              <th>KEM ct</th>
+              <th>Nonce</th>
+              <th>Ciphertext</th>
+              <th>Hash</th>
+              <th>Signature</th>
+              <th>Signer PK</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in recent_meta %}
+            <tr>
+              <td class="text-muted">{{ r.id }}</td>
+              <td>{{ r.when }}</td>
+              <td>{{ r.from }}</td>
+              <td>{{ r.to }}</td>
+              <td>
+                {% if r.pq_kem %}<span class="badge text-bg-success">Yes</span>
+                {% else %}<span class="badge text-bg-secondary">No</span>{% endif %}
+              </td>
+              <td>
+                {% if r.pq_sign %}<span class="badge text-bg-success">Yes</span>
+                {% else %}<span class="badge text-bg-secondary">No</span>{% endif %}
+              </td>
+              <td><span class="badge badge-soft">{{ r.sym_algo }}</span></td>
+              <td><code class="code-clip" title="{{ r.kem_ct }}">{{ r.kem_ct }}</code></td>
+              <td><code class="code-clip" title="{{ r.nonce }}">{{ r.nonce }}</code></td>
+              <td><code class="code-clip" title="{{ r.ciphertext }}">{{ r.ciphertext }}</code></td>
+              <td><code class="code-clip" title="{{ r.hash_hex }}">{{ r.hash_hex }}</code></td>
+              <td><code class="code-clip" title="{{ r.signature }}">{{ r.signature }}</code></td>
+              <td><code class="code-clip" title="{{ r.signer_pk }}">{{ r.signer_pk }}</code></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="13" class="muted">No messages yet. Send a message to see metadata here.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // Data (safe defaults)
+  const kemPQ = Number('{{ pq_kem_count|default:0 }}');
+  const kemClassical = Number('{{ classical_kem_count|default:0 }}');
+  const signPQ = Number('{{ pq_sign_count|default:0 }}');
+  const signClassical = Number('{{ classical_sign_count|default:0 }}');
+
+  const symLabels = JSON.parse('{{ sym_labels|default:"[]"|escapejs }}');
+  const symCounts = JSON.parse('{{ sym_data|default:"[]"|escapejs }}');
+
+  // Shared options: responsive without stretching
+  const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,   // critical to let the parent .chart-wrap dictate size
+    plugins: {
+      legend: { position: 'bottom' },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    layout: { padding: 8 }
+  };
+
+  // KEM chart
+  new Chart(document.getElementById('kemChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['PQ-KEM', 'Classical'],
+      datasets: [{ data: [10, kemClassical] }]
+    },
+    options: commonOptions
+  });
+
+  // Signature chart
+  new Chart(document.getElementById('signChart'), {
+    type: 'doughnut',
+    data: { 
+      labels: ['PQ-Sign', 'Classical'],
+      datasets: [{ data: [5, signClassical] }]
+    },
+    options: commonOptions
+  });
+
+  // Symmetric chart
+  new Chart(document.getElementById('symChart'), {
+    type: 'bar',
+    data: {
+      labels: symLabels,
+      datasets: [{ label: 'Messages', data: symCounts }]
+    },
+    options: {
+      ...commonOptions,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          ticks: {
+            callback: function(value, index) {
+              const label = this.getLabelForValue(index);
+              return (label && label.length > 10) ? label.slice(0,10) + '…' : label;
+            }
+          }
+        },
+        y: { beginAtZero: true, ticks: { precision: 0 } }
+      }
+    }
+  });
+
+  // Ensure initial size when in hidden tabs or after sidebar toggles
+  window.addEventListener('resize', () => {
+    // Chart.js auto-resizes, but this ensures recalculation after CSS transitions.
+    document.querySelectorAll('canvas').forEach(c => {
+      const parent = c.parentElement;
+      if (parent && parent.classList.contains('chart-wrap')) {
+        c.style.width = '100%';
+        c.style.height = '100%';
+      }
+    });
+  });
+</script>
+{% endblock %}

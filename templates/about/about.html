@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content1 %}
+{% endblock %}
+{% block content %}
+
+<!-- About Start -->
+<div class="container-fluid py-5">
+    <div class="container py-5">
+        <div class="row align-items-center">
+                <!-- Card Start -->
+                <div class="card shadow-lg border-0">
+                    <div class="card-body">
+                        <div class="text-left mb-4">
+                            <h5 class="text-primary text-uppercase mb-3" style="letter-spacing: 5px;">About the Project</h5>
+                            <h1>Sensor Module Classification System</h1>
+                        </div>
+                        <p>
+                            This web application classifies various <strong>sensor modules</strong> from uploaded images using a trained <strong>Convolutional Neural Network (CNN)</strong> model. Once a sensor is identified, it displays relevant technical details like usage, advantages, disadvantages, wiring, sample code, and more.
+                        </p>
+
+                        <h5 class="mt-4">🔧 System Workflow:</h5>
+                        <ul>
+                            <li><strong>Step 1:</strong> User uploads an image of a hardware sensor module (e.g., PM2.5, PIR, RFID).</li>
+                            <li><strong>Step 2:</strong> The image is preprocessed and passed to a CNN model trained to classify sensor types.</li>
+                            <li><strong>Step 3:</strong> Once identified, related information about the sensor (e.g., use, wiring, code) is retrieved and displayed.</li>
+                            <li><strong>Step 4:</strong> Transformed image outputs (e.g., grayscale, thresholded, equalized) and prediction results are saved to the database.</li>
+                        </ul>
+
+                        <h5 class="mt-4">🧱 Project Structure:</h5>
+                        <ul>
+                            <li><strong>Backend:</strong> Django with SQLite for storage</li>
+                            <li><strong>Model:</strong> Custom-trained CNN using labeled sensor images</li>
+                            <li><strong>Image Processing:</strong> Applies grayscale, Gaussian blur, histogram equalization, thresholding, ROI extraction</li>
+                            <li><strong>Database:</strong> Saves predictions, transformations, and sensor metadata</li>
+                            <li><strong>User Interface:</strong> Displays original + transformed images with prediction result</li>
+                        </ul>
+
+                        <h5 class="mt-4">🎯 Features:</h5>
+                        <ul>
+                            <li>Image-based sensor classification via CNN</li>
+                            <li>Displays use case, wiring guide, sample code, pros & cons</li>
+                            <li>Saves prediction history with processed images</li>
+                            <li>Simple Bootstrap-based UI with result visualization</li>
+                        </ul>
+                    </div>
+                </div>
+                <!-- Card End -->
+
+        </div>
+    </div>
+</div>
+<!-- About End -->
+
+{% endblock %}

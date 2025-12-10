@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content1 %}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column h-100">
+
+  <!-- Chat-like header -->
+  <div class="d-flex align-items-center border-bottom pb-2 mb-3">
+    <i class="fa-solid fa-comments text-primary fs-4 me-2"></i>
+    <h5 class="mb-0 fw-bold">All Feedback</h5>
+  </div>
+
+  <!-- Chat body with feedback bubbles -->
+  <div class="flex-grow-1 overflow-auto px-2">
+    {% for fb in feedbacks %}
+      <div class="d-flex mb-3 {% if fb.user == user %}justify-content-end{% else %}justify-content-start{% endif %}">
+        <div class="p-3 rounded-3 shadow-sm"
+             style="max-width:70%; word-wrap:break-word;
+                    {% if fb.user == user %}
+                        background:#007bff; color:white; border-bottom-right-radius:0;
+                    {% else %}
+                        background:white; color:#000; border-bottom-left-radius:0;
+                    {% endif %}">
+          <div class="fw-bold small mb-1">
+            {% if fb.user == user %}You{% else %}{{ fb.user.name }}{% endif %}
+          </div>
+          <div>{{ fb.message }}</div>
+          <div class="text-muted small mt-1">{{ fb.created_at|date:"d M Y, h:i A" }}</div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="text-center text-muted py-4">
+        🚫 No feedback submitted yet.
+      </div>
+    {% endfor %}
+  </div>
+
+  <!-- Footer -->
+  <div class="border-top text-center py-2 small text-muted">
+    Showing {{ feedbacks|length }} feedback entries
+  </div>
+</div>
+{% endblock %}

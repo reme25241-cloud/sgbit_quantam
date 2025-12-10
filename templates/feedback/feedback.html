@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block content1 %}{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="card shadow-lg border-0 rounded-4" style="max-width: 700px; margin: auto;">
+    
+    <!-- Header -->
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center rounded-top-4">
+      <div class="d-flex align-items-center">
+        <i class="fa-solid fa-comments fs-4 me-2"></i>
+        <h5 class="mb-0 fw-bold">Feedback Messenger</h5>
+      </div>
+      <a href="{% url 'view_feedbacks' %}" class="btn btn-light btn-sm rounded-pill">
+        <i class="fa-solid fa-eye me-1"></i> View All
+      </a>
+    </div>
+
+    <!-- Chat body -->
+    <div class="card-body" id="chat-body" style="height: 400px; overflow-y: auto; background: #f8f9fa;">
+      <!-- System message -->
+      <div class="d-flex mb-3">
+        <div class="bg-info text-white px-3 py-2 rounded-3 shadow-sm">
+          <i class="fa-solid fa-robot me-1"></i>
+          Hi there 👋! Please share your feedback with us.
+        </div>
+      </div>
+
+      <!-- User messages -->
+      {% for feedback in feedbacks %}
+        <div class="d-flex mb-3 justify-content-end">
+          <div class="bg-primary text-white px-3 py-2 rounded-3 shadow-sm">
+            {{ feedback.message }}
+            <div class="small text-end text-white-50 mt-1">
+              {{ feedback.created_at|date:"M d, H:i" }}
+            </div>
+          </div>
+        </div>
+      {% empty %}
+        <div class="text-muted text-center small">No feedback submitted yet.</div>
+      {% endfor %}
+    </div>
+
+    <!-- Input form -->
+    <div class="card-footer bg-white border-0">
+      <form method="post" class="d-flex align-items-center">
+        {% csrf_token %}
+        <textarea name="text" rows="1" class="form-control rounded-pill me-2" placeholder="Type your feedback..." required></textarea>
+        <button type="submit" class="btn btn-primary rounded-circle shadow">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Scroll chat to bottom
+  const chatBody = document.getElementById('chat-body');
+  if (chatBody) {
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+</script>
+{% endblock %}

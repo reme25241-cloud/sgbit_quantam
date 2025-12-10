@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content1 %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<div class="container-fluid my-3 messaging-app">
+    <div class="card shadow-sm rounded-3" style="height:80vh;width: 100vh;margin-left: 20%;">
+        <!-- Chat Header -->
+        <div class="card-header bg-light d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <a href="{% url 'user_list' %}" class="btn btn-sm btn-outline-secondary me-2">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </a>
+                <i class="fa-solid fa-user-circle fa-2x text-secondary me-2"></i>
+                <div>
+                    <h6 class="mb-0">{{ receiver.get_full_name|default:receiver.username }}</h6>
+                    <small class="text-muted">Online</small>
+                </div>
+            </div>
+            <i class="fa-solid fa-ellipsis-vertical"></i>
+        </div>
+
+        <!-- Chat Messages -->
+        <div class="card-body bg-light" style="overflow-y:auto;">
+            {% for msg in messages %}
+                <div class="d-flex mb-3 {% if msg.sender == user %}justify-content-end{% else %}justify-content-start{% endif %}">
+                    <div class="p-3 rounded-3 shadow-sm"
+                         style="max-width:70%; word-wrap:break-word;
+                         {% if msg.sender == user %}
+                             background:#007bff; color:white; border-bottom-right-radius:0;
+                         {% else %}
+                             background:white; color:#000; border-bottom-left-radius:0;
+                         {% endif %}">
+                        <small class="fw-bold d-block mb-1">{{ msg.sender.username }}</small>
+                        <div>{{ msg.text }}</div>
+                        {% if msg.image %}
+                            <img src="{{ msg.image.url }}" class="img-fluid rounded mt-2" style="max-width:200px;">
+                        {% endif %}
+                        <small class="text-muted d-block mt-1" style="font-size:0.75rem;">{{ msg.timestamp|date:"H:i" }}</small>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Chat Input -->
+        <div class="card-footer bg-white">
+            <form method="post" enctype="multipart/form-data" class="d-flex align-items-center">
+                {% csrf_token %}
+                <label class="btn btn-light mb-0 me-2">
+                    <i class="fa-solid fa-paperclip"></i>
+                    <input type="file" name="image" class="d-none" accept="image/*">
+                </label>
+                <textarea name="text" rows="1" class="form-control me-2 rounded-pill"
+                          placeholder="Type a message..." required></textarea>
+                <button type="submit" class="btn btn-primary rounded-circle">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
