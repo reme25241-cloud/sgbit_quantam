@@ -2,4 +2,6 @@ cryptography
 pqcrypto
 Django
 gunicorn
+crispy-bootstrap5
+django-crispy-forms
 
