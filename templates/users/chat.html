@@ -4,20 +4,15 @@
 
 {% block content %}
 <style>
-  /* Card stays visible; only the inner messages area scrolls */
   .chat-sticky-card{
-    position: sticky;        /* sticks inside .chat-body (the scroll container in base) */
-    top: 12px;               /* little breathing space below the chat header */
-    z-index: 2;              /* stay above the blurred bg */
+    position: sticky;
+    top: 12px;
+    z-index: 2;
     border-radius: 14px;
     box-shadow: 0 10px 30px rgba(2,6,23,.10);
-    overflow: hidden;        /* keep child edges clean */
+    overflow: hidden;
     background: #fff;
-  }
-
-  /* Make the card fill most of the viewport inside .chat-body */
-  .chat-sticky-card{
-    max-height: calc(100vh - 24px - 64px); /* viewport minus margins and header height */
+    max-height: calc(100vh - 24px - 64px);
     display: flex;
     flex-direction: column;
   }
@@ -25,93 +20,118 @@
   .chat-card-header{
     background: #fff;
     border-bottom: 1px solid #e5e7eb;
-    position: sticky; top: 0; z-index: 3; /* header always visible inside the card */
+    position: sticky; top: 0; z-index: 3;
     padding: .75rem 1rem;
   }
 
   .chat-card-body{
     flex: 1 1 auto;
-    overflow-y: auto;        /* only messages scroll */
+    overflow-y: auto;
     background: #f8f9fa;
     padding: 12px;
   }
 
   .chat-card-footer{
-    position: sticky; bottom: 0; z-index: 3; /* composer always visible */
+    position: sticky; bottom: 0; z-index: 3;
     background: #fff;
     border-top: 1px solid #e5e7eb;
     padding: .75rem;
   }
 
-  /* Message bubbles */
   .bubble{
-    max-width:72%; word-wrap:break-word;
-    padding: 12px 14px; border-radius:14px; box-shadow:0 6px 16px rgba(0,0,0,.08);
+    max-width:72%;
+    word-wrap:break-word;
+    padding: 12px 14px;
+    border-radius:14px;
+    box-shadow:0 6px 16px rgba(0,0,0,.08);
   }
   .bubble.me{ background:#0d6efd; color:#fff; border-bottom-right-radius:4px; }
   .bubble.them{ background:#fff; color:#111; border-bottom-left-radius:4px; }
+
   .msg-meta{ font-size:.8rem; color:#9ca3af; margin-top:6px; }
   .bubble.me .msg-meta{ color:#e3e8ef; }
 
-  /* High-contrast blocks inside bubbles */
-  .sec-overview{
-    background:#ffffff; color:#111; border:1px solid #e5e7eb;
-    border-left:4px solid #0d47a1;
-    padding:10px 12px; border-radius:8px; margin-top:10px;
-  }
   details.meta-block{
-    background:#ffffff; color:#111; border:1px solid #e5e7eb;
-    border-radius:10px; padding:8px 10px; margin-top:8px;
+    background:#ffffff;
+    color:#111;
+    border:1px solid #e5e7eb;
+    border-radius:10px;
+    padding:8px 10px;
+    margin-top:8px;
   }
-  details.meta-block > summary{ cursor:pointer; font-weight:600; color:#374151; }
+  details.meta-block > summary{
+    cursor:pointer;
+    font-weight:600;
+    color:#374151;
+  }
 
   .composer textarea{ resize:none; }
 </style>
 
 <div class="card chat-sticky-card">
-  <!-- Header inside the card -->
-  <div class="chat-card-header d-flex align-items-center justify-content-between">
-    <div class="d-flex align-items-center">
-      <a href="{% url 'user_list' %}" class="btn btn-sm btn-outline-secondary me-2">
-        <i class="fa-solid fa-arrow-left"></i>
-      </a>
-      <i class="fa-solid fa-user-circle fa-2x text-secondary me-2"></i>
-      <div>
-        <h6 class="mb-0">{{ receiver.get_full_name|default:receiver.username }}</h6>
-        <small class="text-muted">Online</small>
-      </div>
+
+  <!-- HEADER -->
+  <div class="chat-card-header d-flex align-items-center">
+    <a href="{% url 'user_list' %}" class="btn btn-sm btn-outline-secondary me-2">
+      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+    <i class="fa-solid fa-user-circle fa-2x text-secondary me-2"></i>
+    <div>
+      <h6 class="mb-0">{{ receiver.get_full_name|default:receiver.username }}</h6>
+      <small class="text-muted">Online</small>
     </div>
-    <!-- <i class="fa-solid fa-ellipsis-vertical"></i> -->
   </div>
 
-  <!-- Scrollable messages area -->
+  <!-- MESSAGES -->
   <div class="chat-card-body">
     {% if messages %}
       {% for m in messages %}
         <div class="d-flex mb-3 {% if m.from == request.user %}justify-content-end{% else %}justify-content-start{% endif %}">
           <div class="bubble {% if m.from == request.user %}me{% else %}them{% endif %}">
+
             <small class="fw-bold d-block mb-1">
               {% if m.from == request.user %}You{% else %}{{ m.from.get_full_name|default:m.from.username }}{% endif %}
             </small>
 
-            <!-- Plaintext (decrypted) -->
-            <div>{{ m.plaintext|default:"(unable to decrypt)" }}</div>
-
-            {% if m.image %}
-              <img src="{{ m.image.url }}" class="img-fluid rounded mt-2" style="max-width:220px;">
+            {% if m.plaintext %}
+              <div>{{ m.plaintext }}</div>
             {% endif %}
 
-            <!-- Timestamp + Sig status -->
+            {% if m.image %}
+              <img src="{{ m.image.url }}" class="img-fluid rounded mt-2" style="max-width:240px;">
+            {% endif %}
+
+            {% if m.audio %}
+              <audio controls class="mt-2 w-100">
+                <source src="{{ m.audio.url }}">
+              </audio>
+            {% endif %}
+
+            {% if m.video %}
+              <video controls class="mt-2 rounded" style="max-width:260px;">
+                <source src="{{ m.video.url }}">
+              </video>
+            {% endif %}
+
             <div class="msg-meta">
-              {{ m.timestamp|date:"Y-m-d H:i" }} &middot;
+              {{ m.timestamp|date:"Y-m-d H:i" }} ·
               {% if m.signature_valid is True %}
-                <span>Signature: Verified</span>
+                Signature: Verified
               {% elif m.signature_valid is False %}
                 <span class="text-warning">Signature: Invalid</span>
               {% else %}
-                <span>Signature: N/A</span>
+                Signature: N/A
               {% endif %}
             </div>
+
+            {% if m.meta %}
+              <details class="meta-block">
+                <summary>Encryption metadata</summary>
+                <pre class="mt-2">{{ m.meta|safe }}</pre>
+              </details>
+            {% endif %}
+
+            <br>
 
             {% if m.meta %}
               <div class="sec-overview">
@@ -132,40 +152,51 @@
               </div>
             {% endif %}
 
-            <details class="meta-block">
-              <summary>Encryption metadata</summary>
-              <pre class="mt-2">{{ m.meta|default:"-"|safe }}</pre>
-            </details>
-
             {% if m.decrypt_error %}
-              <div class="text-danger small mt-1">Decrypt error: {{ m.decrypt_error }}</div>
+              <div class="text-danger small mt-1">
+                Decrypt error: {{ m.decrypt_error }}
+              </div>
             {% endif %}
           </div>
         </div>
       {% endfor %}
     {% else %}
-      <div class="text-muted">No messages yet. Start the conversation below.</div>
+      <div class="text-muted">No messages yet.</div>
     {% endif %}
   </div>
 
-  <!-- Composer (sticky at bottom of card) -->
+  <!-- COMPOSER -->
   <div class="chat-card-footer">
-    <form method="post" enctype="multipart/form-data" class="composer d-flex flex-wrap align-items-center gap-2">
+    <form method="post" enctype="multipart/form-data"
+          class="composer d-flex flex-wrap align-items-center gap-2">
       {% csrf_token %}
-      <label class="btn btn-light mb-0 me-1">
-        <i class="fa-solid fa-paperclip"></i>
+
+      <!-- Attachments -->
+      <label class="btn btn-light mb-0">
+        <i class="fa-solid fa-image"></i>
         <input type="file" name="image" class="d-none" accept="image/*">
       </label>
 
-      <textarea name="text" rows="1" class="form-control rounded-pill flex-grow-1" placeholder="Type a secure message..." required></textarea>
+      <label class="btn btn-light mb-0">
+        <i class="fa-solid fa-microphone"></i>
+        <input type="file" name="audio" class="d-none" accept="audio/*">
+      </label>
 
-      <div class="d-flex align-items-center gap-2">
-        <label class="text-muted small mb-0">Symmetric</label>
-        <select name="sym_algo" class="form-select form-select-sm">
-          <option value="AES">AES-GCM</option>
-          <option value="CHACHA20">ChaCha20-Poly1305</option>
-        </select>
-      </div>
+      <label class="btn btn-light mb-0">
+        <i class="fa-solid fa-video"></i>
+        <input type="file" name="video" class="d-none" accept="video/*">
+      </label>
+
+      <!-- Text -->
+      <textarea name="text" rows="1"
+        class="form-control rounded-pill flex-grow-1"
+        placeholder="Type a secure message..."></textarea>
+
+      <!-- Cipher -->
+      <select name="sym_algo" class="form-select form-select-sm">
+        <option value="AES">AES-GCM</option>
+        <option value="CHACHA20">ChaCha20</option>
+      </select>
 
       <button type="submit" class="btn btn-primary rounded-circle">
         <i class="fa-solid fa-paper-plane"></i>
@@ -173,10 +204,7 @@
     </form>
 
     <div class="small text-muted mt-2">
-      <strong>Legend:</strong>
-      <code>pq_kem</code>=Post-Quantum KEM used; <code>pq_sign</code>=Post-Quantum signature used;
-      <code>sym_algo</code>=AES/ChaCha20; <code>nonce</code>=unique per message; <code>kem_ct</code>=KEM ciphertext;
-      <code>hash_hex</code>=SHA3-256 of plaintext. <code>ss</code> stored only for demo (don’t store in production).
+      Media files are stored securely. Text messages are end-to-end encrypted.
     </div>
   </div>
 </div>
