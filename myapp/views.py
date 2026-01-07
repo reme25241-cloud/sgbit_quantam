@@ -203,72 +203,12 @@ def about(request):
     return render(request, 'about/about.html')
 
 # chat
-from django.db.models import Q
+# myapp/views.py
+
+from django.db.models import Q, Exists, OuterRef
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-
-from django.db.models import Exists, OuterRef
-
-@login_required
-def user_list_view(request):
-    query = request.GET.get('q', '')
-    User = get_user_model()
-    users = User.objects.exclude(id=request.user.id)
-
-    # Filter by query if present
-    if query:
-        users = users.filter(
-            Q(username__icontains=query) |
-            Q(first_name__icontains=query) |
-            Q(last_name__icontains=query) |
-            Q(email__icontains=query)
-        )
-
-    # Annotate users with 'has_unread' flag
-    from .models import Message
-    unread_exists = Message.objects.filter(
-        sender=OuterRef('pk'),
-        receiver=request.user,
-        is_read=False
-    )
-    users = users.annotate(has_unread=Exists(unread_exists))
-
-    context = {
-        'users': users,
-        'query': query,
-    }
-    return render(request, 'users/user_list.html', context)
-
-
-# @login_required
-# def chat_view_by_id(request, user_id):
-#     other_user = get_object_or_404(CustomUser, id=user_id)
-#     messages = Message.objects.filter(
-#         (Q(sender=request.user) & Q(receiver=other_user)) |
-#         (Q(sender=other_user) & Q(receiver=request.user))
-#     ).order_by('timestamp')
-
-#     if request.method == 'POST':
-#         text = request.POST.get('text')
-#         image = request.FILES.get('image')
-#         Message.objects.create(sender=request.user, receiver=other_user, text=text, image=image)
-#         return redirect('chat', user_id=other_user.id)  # ✅ Corrected: use user_id instead of username
-
-#     return render(request, 'users/chat.html', {
-#         'messages': messages,
-#         'receiver': other_user
-#     })
-
-# users/views.py (replace existing chat_view_by_id)
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.db.models import Q
-from .models import CustomUser, Message
-from .crypto_utils import secure_send_plaintext, secure_receive_message, sha3_256_hex
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.db.models import Q
 from django.contrib import messages
 
 from .models import CustomUser, Message
@@ -283,123 +223,199 @@ from .crypto_utils import (
     CryptoConfigError,
 )
 
+# =========================================================
+# USER LIST WITH UNREAD INDICATOR
+# =========================================================
+
+@login_required
+def user_list_view(request):
+    query = request.GET.get('q', '')
+    User = get_user_model()
+
+    users = User.objects.exclude(id=request.user.id)
+
+    if query:
+        users = users.filter(
+            Q(username__icontains=query) |
+            Q(first_name__icontains=query) |
+            Q(last_name__icontains=query) |
+            Q(email__icontains=query)
+        )
+
+    unread_exists = Message.objects.filter(
+        sender=OuterRef('pk'),
+        receiver=request.user,
+        is_read=False
+    )
+
+    users = users.annotate(has_unread=Exists(unread_exists))
+
+    return render(request, 'users/user_list.html', {
+        'users': users,
+        'query': query,
+    })
+
+
+# =========================================================
+# CRYPTO HELPERS
+# =========================================================
+
 def _ensure_user_keys(user: CustomUser):
-    """Ensure each user has Kyber + Signature keypairs."""
+    """Ensure user has KEM + signature keypairs."""
     changed = False
-    if not getattr(user, "kem_pk", None) or not getattr(user, "kem_sk", None):
+
+    if not user.kem_pk or not user.kem_sk:
         kem = kem_generate()
-        user.kem_pk, user.kem_sk = kem["pk"], kem["sk"]
+        user.kem_pk = kem["pk"]
+        user.kem_sk = kem["sk"]
         changed = True
-    if not getattr(user, "sign_pk", None) or not getattr(user, "sign_sk", None):
+
+    if not user.sign_pk or not user.sign_sk:
         sig = generate_sign_keypair()
-        user.sign_pk, user.sign_sk = sig["pk"], sig["sk"]
+        user.sign_pk = sig["pk"]
+        user.sign_sk = sig["sk"]
         changed = True
+
     if changed:
-        user.save()
+        user.save(update_fields=["kem_pk", "kem_sk", "sign_pk", "sign_sk"])
+
 
 def _decrypt_self_sent(meta: dict) -> str:
-    """Demo-only: decrypt message sent by me using stored shared secret `ss`."""
+    """
+    DEMO ONLY.
+    Allows sender to decrypt their own message using stored shared secret.
+    REMOVE in production.
+    """
     if not meta:
         return "(unable to decrypt)"
+
     ss_b64 = meta.get("ss")
     if not ss_b64:
-        return "(sent – encrypted stored)"
+        return "(sent – encrypted)"
+
     key = derive_sym_key(ss_b64)
     algo = (meta.get("sym_algo") or "AES").upper()
+
     if algo == "AES":
         pt = decrypt_aes_gcm(meta["nonce"], meta["ciphertext"], key)
     elif algo == "CHACHA20":
         pt = decrypt_chacha20(meta["nonce"], meta["ciphertext"], key)
     else:
         return "(unknown cipher)"
+
     return pt.decode("utf-8", errors="replace")
 
 
+# =========================================================
+# CHAT VIEW (TEXT + IMAGE + AUDIO + VIDEO)
+# =========================================================
 
 @login_required
 def chat_view_by_id(request, user_id):
     other_user = get_object_or_404(CustomUser, id=user_id)
 
-    # Ensure both users have valid crypto keys
+    # Ensure crypto keys exist
     _ensure_user_keys(request.user)
     _ensure_user_keys(other_user)
 
-    # Fetch conversation — latest first
+    # Fetch conversation (latest first)
     qs = Message.objects.filter(
-        (Q(sender=request.user) & Q(receiver=other_user)) |
-        (Q(sender=other_user) & Q(receiver=request.user))
-    ).order_by('-timestamp')  # ✅ Newest messages appear at top
+        Q(sender=request.user, receiver=other_user) |
+        Q(sender=other_user, receiver=request.user)
+    ).order_by('-timestamp')
 
-    # ✅ Mark all unread messages from THEM to YOU as read
+    # Mark unread messages as read
     Message.objects.filter(
         sender=other_user,
         receiver=request.user,
         is_read=False,
-        is_group_message=False,  # keep if you want to ignore group messages
+        is_group_message=False
     ).update(is_read=True)
 
-    # Handle sending a new message
-    if request.method == 'POST':
-        text = (request.POST.get('text') or '').strip()
-        if text:
-            sym_algo = (request.POST.get('sym_algo') or 'AES').upper()
+    # -----------------------------------------------------
+    # SEND MESSAGE
+    # -----------------------------------------------------
+    if request.method == "POST":
+        text = (request.POST.get("text") or "").strip()
+        image = request.FILES.get("image")
+        audio = request.FILES.get("audio")
+        video = request.FILES.get("video")
+        sym_algo = (request.POST.get("sym_algo") or "AES").upper()
+
+        if text or image or audio or video:
             try:
-                meta = secure_send_plaintext(
-                    plaintext=text,
-                    recipient_kem_pk_b64=other_user.kem_pk,
-                    sender_sign_sk_b64=request.user.sign_sk,
-                    sender_sign_pk_b64=request.user.sign_pk,
-                    use_pq_sign=True,
-                    sym_algo=sym_algo
-                )
+                meta = None
+                if text:
+                    meta = secure_send_plaintext(
+                        plaintext=text,
+                        recipient_kem_pk_b64=other_user.kem_pk,
+                        sender_sign_sk_b64=request.user.sign_sk,
+                        sender_sign_pk_b64=request.user.sign_pk,
+                        use_pq_sign=True,
+                        sym_algo=sym_algo,
+                    )
+
                 Message.objects.create(
                     sender=request.user,
                     receiver=other_user,
-                    text='',
+                    text="",
                     encrypted_meta=meta,
-                    is_group_message=False,  # explicit if you use this flag
+                    image=image,
+                    audio=audio,
+                    video=video,
+                    is_group_message=False,
                 )
-            except CryptoConfigError as e:
-                messages.error(request, f"Crypto configuration error: {e}")
-            except Exception as e:
-                messages.error(request, f"Unexpected crypto error: {e}")
-        return redirect('chat', user_id=other_user.id)
 
-    # Display messages (decrypt for receiver & self)
+            except CryptoConfigError as e:
+                messages.error(request, f"Crypto error: {e}")
+            except Exception as e:
+                messages.error(request, f"Send failed: {e}")
+
+        return redirect("chat", user_id=other_user.id)
+
+    # -----------------------------------------------------
+    # DISPLAY MESSAGES
+    # -----------------------------------------------------
     display_items = []
+
     for msg in qs:
         meta = msg.encrypted_meta or {}
+
         entry = {
-            'timestamp': msg.timestamp,
-            'from': msg.sender,
-            'meta': meta,
-            'image': getattr(msg, "image", None),
+            "timestamp": msg.timestamp,
+            "from": msg.sender,
+            "meta": meta,
+            "image": msg.image,
+            "audio": msg.audio,
+            "video": msg.video,
         }
+
         try:
             if msg.sender == request.user:
-                # decrypt own message using stored shared secret (demo only)
-                entry['plaintext'] = _decrypt_self_sent(meta)
-                entry['signature_valid'] = None
+                entry["plaintext"] = _decrypt_self_sent(meta)
+                entry["signature_valid"] = None
             else:
-                fallback_pk = msg.sender.sign_pk if getattr(msg.sender, "sign_pk", None) else None
+                fallback_pk = msg.sender.sign_pk
                 plaintext, sig_ok = secure_receive_message(
                     recipient_kem_sk_b64=request.user.kem_sk,
                     stored_meta=meta,
-                    fallback_signer_pk_b64=fallback_pk
+                    fallback_signer_pk_b64=fallback_pk,
                 )
-                entry['plaintext'] = plaintext
-                entry['signature_valid'] = sig_ok
+                entry["plaintext"] = plaintext
+                entry["signature_valid"] = sig_ok
+
         except Exception as e:
-            entry['plaintext'] = "(decryption failed)"
-            entry['signature_valid'] = False
-            entry['decrypt_error'] = str(e)
+            entry["plaintext"] = "(decryption : ynytcdtr547886vrtcxsew)"
+            entry["signature_valid"] = False
+            entry["decrypt_error"] = str(e)
 
         display_items.append(entry)
 
-    return render(request, 'users/chat.html', {
-        'messages': display_items,
-        'receiver': other_user,
+    return render(request, "users/chat.html", {
+        "messages": display_items,
+        "receiver": other_user,
     })
+
 
 # Feedback
 
