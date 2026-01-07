@@ -138,6 +138,9 @@ LOGIN_URL = 'login'
 LOGOUT_REDIRECT_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
